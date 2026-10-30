@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MatchCard } from '../components/MatchCard';
+import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
 import type { MatchesResponse } from '../types';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'success'; data: MatchesResponse };
+  | { status: 'success'; data: MatchesResponse; updatedAt: Date };
+
+type Filter = 'all' | 'upcoming' | 'finished';
+const filters: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'Все' },
+  { value: 'upcoming', label: 'Предстоящие' },
+  { value: 'finished', label: 'Завершённые' },
+];
 
 export function MatchesScreen() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -19,7 +30,8 @@ export function MatchesScreen() {
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     async function loadMatches() {
-      setState({ status: 'loading' });
+      setRefreshError(null);
+      setState(previous => previous.status === 'success' ? previous : { status: 'loading' });
       try {
         const response = await fetch(MATCHES_URL, { signal: controller.signal });
         if (!response.ok) throw new Error(`Сервер вернул ошибку ${response.status}.`);
@@ -27,18 +39,18 @@ export function MatchesScreen() {
         if (!data || !Array.isArray(data.matches)) {
           throw new Error('Сервер вернул данные в неожиданном формате.');
         }
-        if (active) setState({ status: 'success', data });
+        if (active) setState({ status: 'success', data, updatedAt: new Date() });
       } catch (error) {
         if (active) {
-          setState({
-            status: 'error',
-            message: controller.signal.aborted
-              ? 'Сервер не ответил вовремя. Попробуйте ещё раз.'
-              : error instanceof Error ? error.message : 'Проверьте подключение к интернету.',
-          });
+          const message = controller.signal.aborted
+            ? 'Сервер не ответил вовремя. Попробуйте ещё раз.'
+            : error instanceof Error ? error.message : 'Проверьте подключение к интернету.';
+          setRefreshError(message);
+          setState(previous => previous.status === 'success' ? previous : { status: 'error', message });
         }
       } finally {
         clearTimeout(timeout);
+        if (active) setRefreshing(false);
       }
     }
 
@@ -49,6 +61,18 @@ export function MatchesScreen() {
       controller.abort();
     };
   }, [attempt]);
+
+  function reload() {
+    setRefreshing(true);
+    setAttempt(value => value + 1);
+  }
+
+  const matches = state.status === 'success' ? state.data.matches : [];
+  const visibleMatches = matches.filter(match => {
+    if (filter === 'upcoming') return match.status === 'scheduled' || match.status === 'postponed';
+    if (filter === 'finished') return match.status === 'finished';
+    return true;
+  });
 
   return (
     <View style={styles.container}>
@@ -65,16 +89,42 @@ export function MatchesScreen() {
           <Text style={styles.error} accessibilityRole="alert">{state.message}</Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setAttempt(value => value + 1)}
+            onPress={reload}
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           >
             <Text style={styles.buttonText}>Повторить</Text>
           </Pressable>
         </View>
       )}
-      {state.status === 'success' && (
+      {state.status === 'success' && <>
+        <View style={styles.filters}>
+          {filters.map(option => (
+            <Pressable
+              key={option.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === option.value }}
+              onPress={() => setFilter(option.value)}
+              style={[styles.filter, filter === option.value && styles.selectedFilter]}
+            >
+              <Text style={filter === option.value ? styles.selectedFilterText : styles.filterText}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.toolbar}>
+          <UpdatedAgo since={state.updatedAt} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: refreshing }}
+            disabled={refreshing}
+            onPress={reload}
+            style={({ pressed }) => [styles.button, (pressed || refreshing) && styles.pressed]}
+          >
+            <Text style={styles.buttonText}>{refreshing ? 'Обновляем…' : 'Обновить'}</Text>
+          </Pressable>
+        </View>
+        {refreshError && <Text style={styles.error} accessibilityRole="alert">Не удалось обновить. Показаны предыдущие данные. {refreshError}</Text>}
         <FlatList
-          data={state.data.matches}
+          data={visibleMatches}
           keyExtractor={match => match.id}
           renderItem={({ item }) => <MatchCard match={item} />}
           contentContainerStyle={styles.list}
@@ -83,12 +133,12 @@ export function MatchesScreen() {
           }
           ListEmptyComponent={
             <View style={styles.message}>
-              <Text style={styles.messageTitle}>Матчей пока нет</Text>
-              <Text style={styles.secondary}>Расписание этого тура ещё не опубликовано.</Text>
+              <Text style={styles.messageTitle}>{matches.length === 0 ? 'Матчей пока нет' : 'В этой категории матчей нет'}</Text>
+              <Text style={styles.secondary}>{matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.' : 'Выберите другой фильтр, чтобы увидеть остальные матчи.'}</Text>
             </View>
           }
         />
-      )}
+      </>}
     </View>
   );
 }
@@ -97,6 +147,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, width: '100%', maxWidth: 760, alignSelf: 'center' },
   title: { fontSize: 24, fontWeight: '700', marginBottom: 16, color: '#111827' },
   list: { gap: 12, paddingBottom: 24 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  filter: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
+  selectedFilter: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  filterText: { color: '#374151', fontSize: 14 },
+  selectedFilterText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
   message: { paddingVertical: 40, alignItems: 'center', gap: 12 },
   messageTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   secondary: { fontSize: 14, color: '#6b7280' },
