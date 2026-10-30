@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
+import { useTheme } from '../theme';
 
 type Props = {
   // Момент последней успешной загрузки данных.
@@ -8,6 +9,7 @@ type Props = {
 
 // Подпись «Обновлено N сек назад».
 export function UpdatedAgo({ since }: Props) {
+  const { colors } = useTheme();
   const sinceMs = since.getTime();
   const [now, setNow] = useState(() => Date.now());
 
@@ -21,12 +23,11 @@ export function UpdatedAgo({ since }: Props) {
 
   const seconds = Math.max(0, Math.floor((now - sinceMs) / 1000));
 
-  return <Text style={styles.text}>Обновлено {seconds} сек назад</Text>;
+  return <Text style={[styles.text, { color: colors.muted }]}>Обновлено {seconds} сек назад</Text>;
 }
 
 const styles = StyleSheet.create({
   text: {
-    fontSize: 13,
-    color: '#6b7280',
+    fontSize: 12,
   },
 });

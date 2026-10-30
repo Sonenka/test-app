@@ -8,7 +8,6 @@ function toggleId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id];
 }
 
-// Избранное хранится на устройстве; быстрые нажатия до чтения хранилища не теряются.
 export function useFavorites() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -32,8 +31,6 @@ export function useFavorites() {
         hydrated.current = true;
         setLoaded(true);
       } catch (error) {
-        // При недоступном хранилище избранное продолжает работать в памяти.
-        // Не перезаписываем данные, которые не удалось прочитать.
         if (active) {
           hydrated.current = true;
           pendingToggles.current = [];
@@ -49,7 +46,6 @@ export function useFavorites() {
   useEffect(() => {
     if (!loaded) return;
     const value = JSON.stringify(favorites);
-    // Последовательная запись не позволяет старому запросу затереть новый выбор.
     pendingWrite = pendingWrite
       .then(() => AsyncStorage.setItem(STORAGE_KEY, value))
       .catch(error => { console.warn('Не удалось сохранить избранное.', error); });
