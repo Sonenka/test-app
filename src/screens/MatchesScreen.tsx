@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MatchCard } from '../components/MatchCard';
 import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
@@ -24,6 +24,7 @@ export function MatchesScreen() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [errorPopupVisible, setErrorPopupVisible] = useState(false);
@@ -76,12 +77,24 @@ export function MatchesScreen() {
   }
 
   const matches = state.status === 'success' ? state.data.matches : [];
+  const query = search.trim().toLocaleLowerCase('ru-RU');
   const visibleMatches = matches.filter(match => {
+    if (query && ![match.home.name, match.away.name].some(name => name.toLocaleLowerCase('ru-RU').includes(query))) {
+      return false;
+    }
     if (filter === 'upcoming') return match.status === 'scheduled' || match.status === 'postponed';
     if (filter === 'finished') return match.status === 'finished';
     if (filter === 'favorites') return isFavorite(match.id);
     return true;
   }).sort((a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id)));
+
+  const emptyTitle = query ? 'Матчи не найдены'
+    : filter === 'favorites' ? 'Избранных матчей пока нет'
+    : matches.length === 0 ? 'Матчей пока нет' : 'В этой категории матчей нет';
+  const emptyHint = query ? 'Измените название клуба или выберите другую категорию.'
+    : filter === 'favorites' ? 'Нажмите на звёздочку в карточке матча, чтобы добавить его сюда.'
+    : matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.'
+    : 'Выберите другой фильтр, чтобы увидеть остальные матчи.';
 
   return (
     <View style={styles.container}>
@@ -105,6 +118,22 @@ export function MatchesScreen() {
         </View>
       )}
       {state.status === 'success' && <>
+        <View style={styles.searchRow}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Поиск по названию клуба"
+            accessibilityLabel="Поиск по названию клуба"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.searchInput}
+          />
+          {search.length > 0 && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Очистить поиск" onPress={() => setSearch('')} style={styles.clearSearch}>
+              <Text style={styles.filterText}>Очистить</Text>
+            </Pressable>
+          )}
+        </View>
         <View style={styles.filters}>
           {filters.map(option => (
             <Pressable
@@ -143,13 +172,14 @@ export function MatchesScreen() {
             <MatchCard match={item} favorite={isFavorite(item.id)} onToggleFavorite={() => toggle(item.id)} />
           )}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <Text style={styles.secondary}>Тур {state.data.round} · Время указано в вашем часовом поясе</Text>
           }
           ListEmptyComponent={
             <View style={styles.message}>
-              <Text style={styles.messageTitle}>{filter === 'favorites' ? 'Избранных матчей пока нет' : matches.length === 0 ? 'Матчей пока нет' : 'В этой категории матчей нет'}</Text>
-              <Text style={styles.secondary}>{filter === 'favorites' ? 'Нажмите на звёздочку в карточке матча, чтобы добавить его сюда.' : matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.' : 'Выберите другой фильтр, чтобы увидеть остальные матчи.'}</Text>
+              <Text style={styles.messageTitle}>{emptyTitle}</Text>
+              <Text style={styles.secondary}>{emptyHint}</Text>
             </View>
           }
         />}
@@ -182,6 +212,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, width: '100%', maxWidth: 760, alignSelf: 'center' },
   title: { fontSize: 24, fontWeight: '700', marginBottom: 16, color: '#111827' },
   list: { gap: 12, paddingBottom: 24 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  searchInput: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 12, fontSize: 16, color: '#111827' },
+  clearSearch: { paddingVertical: 12, paddingHorizontal: 8 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   popup: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 16, padding: 24, gap: 16 },
   closeButton: { alignItems: 'center', padding: 12 },
