@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MatchCard } from '../components/MatchCard';
 import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
@@ -25,6 +25,7 @@ export function MatchesScreen() {
   const [filter, setFilter] = useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [errorPopupVisible, setErrorPopupVisible] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -48,6 +49,7 @@ export function MatchesScreen() {
             ? 'Сервер не ответил вовремя. Попробуйте ещё раз.'
             : error instanceof Error ? error.message : 'Проверьте подключение к интернету.';
           setRefreshError(message);
+          setErrorPopupVisible(true);
           setState(previous => previous.status === 'success' ? previous : { status: 'error', message });
         }
       } finally {
@@ -65,6 +67,9 @@ export function MatchesScreen() {
   }, [attempt]);
 
   function reload() {
+    if (refreshing) return;
+    setErrorPopupVisible(false);
+    setRefreshError(null);
     setRefreshing(true);
     setAttempt(value => value + 1);
   }
@@ -79,16 +84,15 @@ export function MatchesScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Матчи тура</Text>
-      {state.status === 'loading' && (
+      {(state.status === 'loading' || (state.status === 'error' && refreshing)) && (
         <View style={styles.message}>
           <ActivityIndicator size="large" color="#2563eb" />
           <Text style={styles.secondary}>Загружаем матчи…</Text>
         </View>
       )}
-      {state.status === 'error' && (
+      {state.status === 'error' && !refreshing && (
         <View style={styles.message}>
           <Text style={styles.messageTitle}>Не удалось загрузить матчи</Text>
-          <Text style={styles.error} accessibilityRole="alert">{state.message}</Text>
           <Pressable
             accessibilityRole="button"
             onPress={reload}
@@ -121,11 +125,15 @@ export function MatchesScreen() {
             onPress={reload}
             style={({ pressed }) => [styles.button, (pressed || refreshing) && styles.pressed]}
           >
-            <Text style={styles.buttonText}>{refreshing ? 'Обновляем…' : 'Обновить'}</Text>
+            <Text style={styles.buttonText}>Обновить</Text>
           </Pressable>
         </View>
-        {refreshError && <Text style={styles.error} accessibilityRole="alert">Не удалось обновить. Показаны предыдущие данные. {refreshError}</Text>}
-        <FlatList
+        {refreshing ? (
+          <View style={styles.message}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={styles.secondary}>Обновляем матчи…</Text>
+          </View>
+        ) : <FlatList
           data={visibleMatches}
           keyExtractor={match => match.id}
           extraData={favorites}
@@ -142,8 +150,28 @@ export function MatchesScreen() {
               <Text style={styles.secondary}>{matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.' : 'Выберите другой фильтр, чтобы увидеть остальные матчи.'}</Text>
             </View>
           }
-        />
+        />}
       </>}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={errorPopupVisible}
+        onRequestClose={() => setErrorPopupVisible(false)}
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.popup} accessibilityViewIsModal>
+            <Text style={styles.messageTitle}>Не удалось загрузить матчи</Text>
+            <Text style={styles.error} accessibilityRole="alert">{refreshError}</Text>
+            {state.status === 'success' && <Text style={styles.secondary}>Сохранены данные предыдущей загрузки.</Text>}
+            <Pressable accessibilityRole="button" onPress={reload} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
+              <Text style={styles.buttonText}>Повторить</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setErrorPopupVisible(false)} style={styles.closeButton}>
+              <Text style={styles.filterText}>Закрыть</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -152,6 +180,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, width: '100%', maxWidth: 760, alignSelf: 'center' },
   title: { fontSize: 24, fontWeight: '700', marginBottom: 16, color: '#111827' },
   list: { gap: 12, paddingBottom: 24 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  popup: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 16, padding: 24, gap: 16 },
+  closeButton: { alignItems: 'center', padding: 12 },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   filter: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
   selectedFilter: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
