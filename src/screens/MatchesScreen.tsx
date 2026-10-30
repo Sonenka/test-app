@@ -11,11 +11,12 @@ type LoadState =
   | { status: 'error'; message: string }
   | { status: 'success'; data: MatchesResponse; updatedAt: Date };
 
-type Filter = 'all' | 'upcoming' | 'finished';
+type Filter = 'all' | 'upcoming' | 'finished' | 'favorites';
 const filters: { value: Filter; label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'upcoming', label: 'Предстоящие' },
   { value: 'finished', label: 'Завершённые' },
+  { value: 'favorites', label: 'Избранные' },
 ];
 
 export function MatchesScreen() {
@@ -78,8 +79,9 @@ export function MatchesScreen() {
   const visibleMatches = matches.filter(match => {
     if (filter === 'upcoming') return match.status === 'scheduled' || match.status === 'postponed';
     if (filter === 'finished') return match.status === 'finished';
+    if (filter === 'favorites') return isFavorite(match.id);
     return true;
-  });
+  }).sort((a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id)));
 
   return (
     <View style={styles.container}>
@@ -146,8 +148,8 @@ export function MatchesScreen() {
           }
           ListEmptyComponent={
             <View style={styles.message}>
-              <Text style={styles.messageTitle}>{matches.length === 0 ? 'Матчей пока нет' : 'В этой категории матчей нет'}</Text>
-              <Text style={styles.secondary}>{matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.' : 'Выберите другой фильтр, чтобы увидеть остальные матчи.'}</Text>
+              <Text style={styles.messageTitle}>{filter === 'favorites' ? 'Избранных матчей пока нет' : matches.length === 0 ? 'Матчей пока нет' : 'В этой категории матчей нет'}</Text>
+              <Text style={styles.secondary}>{filter === 'favorites' ? 'Нажмите на звёздочку в карточке матча, чтобы добавить его сюда.' : matches.length === 0 ? 'Расписание этого тура ещё не опубликовано.' : 'Выберите другой фильтр, чтобы увидеть остальные матчи.'}</Text>
             </View>
           }
         />}
@@ -193,7 +195,7 @@ const styles = StyleSheet.create({
   messageTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   secondary: { fontSize: 14, color: '#6b7280' },
   error: { fontSize: 14, color: '#b91c1c', textAlign: 'center' },
-  button: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  button: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.75 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
 });
