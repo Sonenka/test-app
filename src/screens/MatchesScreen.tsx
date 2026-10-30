@@ -4,6 +4,7 @@ import { MatchCard } from '../components/MatchCard';
 import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
 import type { MatchesResponse } from '../types';
+import { useFavorites } from '../hooks/useFavorites';
 
 type LoadState =
   | { status: 'loading' }
@@ -18,6 +19,7 @@ const filters: { value: Filter; label: string }[] = [
 ];
 
 export function MatchesScreen() {
+  const { favorites, isFavorite, toggle } = useFavorites();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
@@ -126,7 +128,10 @@ export function MatchesScreen() {
         <FlatList
           data={visibleMatches}
           keyExtractor={match => match.id}
-          renderItem={({ item }) => <MatchCard match={item} />}
+          extraData={favorites}
+          renderItem={({ item }) => (
+            <MatchCard match={item} favorite={isFavorite(item.id)} onToggleFavorite={() => toggle(item.id)} />
+          )}
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <Text style={styles.secondary}>Тур {state.data.round} · Время указано в вашем часовом поясе</Text>
