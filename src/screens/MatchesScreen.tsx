@@ -5,14 +5,14 @@ import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
 import type { MatchesResponse } from '../types';
 import { useFavorites } from '../hooks/useFavorites';
+import { filterMatches, type MatchFilter } from '../utils/filterMatches';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'success'; data: MatchesResponse; updatedAt: Date };
 
-type Filter = 'all' | 'upcoming' | 'finished' | 'favorites';
-const filters: { value: Filter; label: string }[] = [
+const filters: { value: MatchFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'upcoming', label: 'Предстоящие' },
   { value: 'finished', label: 'Завершённые' },
@@ -23,7 +23,7 @@ export function MatchesScreen() {
   const { favorites, isFavorite, toggle } = useFavorites();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<MatchFilter>('all');
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -78,15 +78,7 @@ export function MatchesScreen() {
 
   const matches = state.status === 'success' ? state.data.matches : [];
   const query = search.trim().toLocaleLowerCase('ru-RU');
-  const visibleMatches = matches.filter(match => {
-    if (query && ![match.home.name, match.away.name].some(name => name.toLocaleLowerCase('ru-RU').includes(query))) {
-      return false;
-    }
-    if (filter === 'upcoming') return match.status === 'scheduled' || match.status === 'postponed';
-    if (filter === 'finished') return match.status === 'finished';
-    if (filter === 'favorites') return isFavorite(match.id);
-    return true;
-  }).sort((a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id)));
+  const visibleMatches = filterMatches(matches, filter, favorites, search);
 
   const emptyTitle = query ? 'Матчи не найдены'
     : filter === 'favorites' ? 'Избранных матчей пока нет'
